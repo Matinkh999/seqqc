@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Big files: downloaded datasets and results (do not commit them)
+/data/
+/results/
+*.fastq.gz
+*_fastqc.zip
+*_fastqc.html
