@@ -1,9 +1,10 @@
 import gzip
+import inspect
 from pathlib import Path
 
 import pytest
 
-from seqqc.fasta_stats import fasta_stats, main, sequence_stats, total_stats
+from seqqc.fasta_stats import fasta_stats, iter_fasta_stats, main, sequence_stats, total_stats
 from seqqc.io import FormatError, read_fasta
 
 DATA = Path(__file__).parent / "data"
@@ -78,3 +79,14 @@ def test_cli_prints_a_table(capsys):
 def test_cli_reports_a_missing_file(capsys):
     assert main(["no_such_file.fasta"]) == 1
     assert "no_such_file.fasta" in capsys.readouterr().err
+
+
+def test_iter_fasta_stats_matches_the_in_memory_calculation():
+    # the streaming code (line by line) and sequence_stats (whole sequence) must agree
+    streamed = fasta_stats(DATA / "tiny.fasta")
+    in_memory = [sequence_stats(r.name, r.seq) for r in read_fasta(DATA / "tiny.fasta")]
+    assert streamed == in_memory
+
+
+def test_iter_fasta_stats_is_a_generator():
+    assert inspect.isgenerator(iter_fasta_stats(DATA / "tiny.fasta"))
