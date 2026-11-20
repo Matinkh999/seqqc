@@ -8,6 +8,10 @@ Definitions
 N and other ambiguity codes are counted in the length, but not in the GC%
 denominator. Lower-case letters are treated like upper-case ones.
 
+The file is processed line by line and the sequence itself is never stored:
+only a few running counters per record are kept, so memory use does not depend
+on the size of the file (or of a single sequence).
+
 Run it:
     python -m seqqc.fasta_stats file.fasta     (package installed)
     python scripts/fasta_gc.py file.fasta      (no installation needed)
@@ -17,7 +21,9 @@ import argparse
 import sys
 from dataclasses import dataclass
 
-from .io import FormatError, read_fasta
+from .io import FormatError, iter_fasta_lines
+
+NAME_WIDTH = 16
 
 
 @dataclass(frozen=True)
@@ -34,16 +40,37 @@ class SeqStats:
 
 
 def sequence_stats(name, seq) -> SeqStats:
-    """Length and base counts of one sequence."""
+    """Length and base counts of one sequence that is already in memory."""
     seq = seq.upper()
     g, c = seq.count("G"), seq.count("C")
     a, t = seq.count("A"), seq.count("T")
     return SeqStats(name, len(seq), g + c, g + c + a + t)
 
 
+def iter_fasta_stats(path):
+    """Yield the SeqStats of each sequence, one at a time, reading line by line."""
+    name = None
+    length = g = c = a = t = 0
+    for is_header, text in iter_fasta_lines(path):
+        if is_header:
+            if name is not None:
+                yield SeqStats(name, length, g + c, g + c + a + t)
+            name = text
+            length = g = c = a = t = 0
+        else:
+            line = text.upper()
+            length += len(line)
+            g += line.count("G")
+            c += line.count("C")
+            a += line.count("A")
+            t += line.count("T")
+    if name is not None:
+        yield SeqStats(name, length, g + c, g + c + a + t)
+
+
 def fasta_stats(path) -> list[SeqStats]:
-    """Statistics of every sequence in a FASTA file."""
-    return [sequence_stats(record.name, record.seq) for record in read_fasta(path)]
+    """All SeqStats of a file as a list (convenient for small files and tests)."""
+    return list(iter_fasta_stats(path))
 
 
 def total_stats(stats) -> SeqStats:
@@ -57,15 +84,13 @@ def total_stats(stats) -> SeqStats:
     )
 
 
-def format_table(stats) -> str:
-    """Text table: one row per sequence plus a TOTAL row."""
-    rows = list(stats) + [total_stats(stats)]
-    labels = [(s.name.split() or ["(unnamed)"])[0] for s in rows]
-    width = max(len(label) for label in ["sequence", *labels])
-    lines = [f"{'sequence':<{width}}  {'length':>12}  {'GC%':>7}"]
-    for label, s in zip(labels, rows):
-        lines.append(f"{label:<{width}}  {s.length:>12,}  {s.gc_percent:>7.2f}")
-    return "\n".join(lines)
+def table_header() -> str:
+    return f"{'sequence':<{NAME_WIDTH}}  {'length':>12}  {'GC%':>7}"
+
+
+def table_row(stats) -> str:
+    label = (stats.name.split() or ["(unnamed)"])[0]
+    return f"{label:<{NAME_WIDTH}}  {stats.length:>12,}  {stats.gc_percent:>7.2f}"
 
 
 def main(argv=None) -> int:
@@ -76,16 +101,24 @@ def main(argv=None) -> int:
     parser.add_argument("fasta", help="FASTA file (.fasta, .fa, .fna; .gz is fine)")
     args = parser.parse_args(argv)
 
+    count = length = gc = acgt = 0
     try:
-        stats = fasta_stats(args.fasta)
+        for stats in iter_fasta_stats(args.fasta):
+            if count == 0:
+                print(table_header())
+            print(table_row(stats))
+            count += 1
+            length += stats.length
+            gc += stats.gc
+            acgt += stats.acgt
     except (OSError, FormatError, UnicodeDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    if not stats:
+    if count == 0:
         print(f"error: no sequences found in {args.fasta}", file=sys.stderr)
         return 1
 
-    print(format_table(stats))
+    print(table_row(SeqStats("TOTAL", length, gc, acgt)))
     return 0
 
 
