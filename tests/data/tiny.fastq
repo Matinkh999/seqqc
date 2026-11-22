@@ -1,0 +1,20 @@
+@read1 demo
+GATTACAGATTA
++
+IIIIIHHHGG#!
+@read2 all_good
+GGCCGGCCAATT
++
+IIIIIIIIIIII
+@read3 has_N
+ACGTNACGTNAC
++
+IIII!IIII!II
+@read4 low_quality_tail
+TTGACCATTGAC
++
+IIIIII55++##
+@read5 qual_starts_with_at
+ACGTACGTACGT
++
+@@IIIIIIII++
